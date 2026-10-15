@@ -213,7 +213,8 @@ function MainDirectory({
   const onAppPage = isAppPage(view);
   // Focused UI: only expose the three requested tools in navigation.
   // Other features remain intact internally.
-  if (true) {
+  const focusedUiOnly = import.meta.env.VITE_FOCUSED_UI_ONLY !== "false";
+  if (focusedUiOnly) {
     const focusedPages: {
       page: GlobalPage;
       label: string;
