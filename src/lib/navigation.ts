@@ -102,10 +102,16 @@ export function appPageBelongsTo(page: AppPage, app: AppId): boolean {
 }
 
 export function readStoredView(): View {
+  // Keep the focused interface on one of its three visible features even
+  // when an older version saved a hidden page as the last active view.
   try {
-    return parseView(localStorage.getItem(VIEW_STORAGE_KEY)) ?? "providers";
+    const saved = parseView(localStorage.getItem(VIEW_STORAGE_KEY));
+    return saved === "mcp" || saved === "skills" ||
+      saved === "skillsDiscovery" || saved === "prompts"
+      ? saved
+      : "skills";
   } catch {
-    return "providers";
+    return "skills";
   }
 }
 

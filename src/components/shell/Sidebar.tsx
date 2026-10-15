@@ -211,6 +211,37 @@ function MainDirectory({
   const { appStatus, todayCost, authNeedsAttention } = useSidebarStatus();
   const apps = APP_IDS.filter((app) => visibleApps[app]);
   const onAppPage = isAppPage(view);
+  // Focused UI: only expose the three requested tools in navigation.
+  // Other features remain intact internally.
+  const focusedUiOnly = import.meta.env.VITE_FOCUSED_UI_ONLY !== "false";
+  if (focusedUiOnly) {
+    const focusedPages: {
+      page: GlobalPage;
+      label: string;
+      icon: IconComponent;
+    }[] = [
+      { page: "skills", label: "Skills", icon: SkillsIcon },
+      { page: "mcp", label: "MCP", icon: Server },
+      { page: "prompts", label: t("nav.prompts"), icon: BookOpen },
+    ];
+    return (
+      <div className="flex min-h-0 flex-1 flex-col pt-2">
+        {focusedPages.map((item) => (
+          <NavItem
+            key={item.page}
+            collapsed={collapsed}
+            selected={
+              view === item.page ||
+              (item.page === "skills" && view === "skillsDiscovery")
+            }
+            icon={item.icon}
+            label={item.label}
+            onClick={() => onSelectPage(item.page)}
+          />
+        ))}
+      </div>
+    );
+  }
 
   const todayLabel =
     todayCost > 0
