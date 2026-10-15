@@ -197,143 +197,38 @@ function SidebarTopBar({
 
 // ─── 主目录 ────────────────────────────────────────────────────────────────
 
+/**
+ * Focused navigation: the other features remain implemented, but are not
+ * exposed in the sidebar. This build is for Skills, MCP and Prompts only.
+ */
 function MainDirectory({
   collapsed,
-  activeApp,
   view,
-  visibleApps,
-  onSelectApp,
   onSelectPage,
-  appsUpdateAvailable = false,
 }: DirectoryProps) {
   const { t } = useTranslation();
-  const { hasUpdate } = useUpdate();
-  const { appStatus, todayCost, authNeedsAttention } = useSidebarStatus();
-  const apps = APP_IDS.filter((app) => visibleApps[app]);
-  const onAppPage = isAppPage(view);
-
-  const todayLabel =
-    todayCost > 0
-      ? t("nav.todayCost", { cost: fmtUsd(todayCost, 2) })
-      : undefined;
-
-  const globals: {
-    page: GlobalPage;
-    label: string;
-    icon: IconComponent;
-    trailing?: string;
-    alert?: string;
-  }[] = [
-    { page: "mcp", label: "MCP", icon: Server },
+  const globals: { page: GlobalPage; label: string; icon: IconComponent }[] = [
     { page: "skills", label: "Skills", icon: SkillsIcon },
+    { page: "mcp", label: "MCP", icon: Server },
     { page: "prompts", label: t("nav.prompts"), icon: BookOpen },
-    { page: "sessions", label: t("nav.sessions"), icon: History },
-    {
-      page: "auth",
-      label: t("nav.auth"),
-      icon: KeyRound,
-      alert: authNeedsAttention ? t("nav.authNeedsReauth") : undefined,
-    },
-    {
-      page: "usage",
-      label: t("nav.usage"),
-      icon: ChartColumn,
-      trailing: todayLabel,
-    },
   ];
 
-  const isGlobalSelected = (page: GlobalPage) =>
-    view === page || (page === "skills" && view === "skillsDiscovery");
-
   return (
-    <>
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden pb-2 pt-0.5",
-          // 图标轨只有 72 宽，放不下滚动条
-          collapsed && "no-scrollbar",
-        )}
-      >
-        <div
-          role="group"
-          aria-label={t("nav.appsGroup")}
-          className="flex shrink-0 flex-col"
-        >
-          {apps.map((app) => (
-            <AppNavItem
-              key={app}
-              app={app}
-              collapsed={collapsed}
-              selected={onAppPage && activeApp === app}
-              status={appStatus(app)}
-              onSelect={() => onSelectApp(app)}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div
-        className={cn(
-          "h-px shrink-0 bg-border",
-          collapsed ? "mx-[18px] my-1.5" : "mx-4 mb-1.5 mt-0.5",
-        )}
-      />
-
-      <div className="flex shrink-0 flex-col">
-        {globals.map((item) => (
-          <NavItem
-            key={item.page}
-            collapsed={collapsed}
-            selected={isGlobalSelected(item.page)}
-            icon={item.icon}
-            label={item.label}
-            trailing={item.trailing}
-            alert={item.alert}
-            onClick={() => onSelectPage(item.page)}
-          />
-        ))}
-      </div>
-
-      {/* 和上面那条分隔线同样缩进、上下各留 6px，选中的最后一项不会贴着线 */}
-      <div
-        className={cn(
-          "my-1.5 h-px shrink-0 bg-border",
-          collapsed ? "mx-[18px]" : "mx-4",
-        )}
-      />
-
-      <div
-        className={cn(
-          "flex shrink-0 pb-2",
-          // 收起时竖排，和上面全局项一样无间隙
-          collapsed ? "flex-col" : "gap-1 px-2",
-        )}
-      >
+    <div className="flex min-h-0 flex-1 flex-col pt-2">
+      {globals.map((item) => (
         <NavItem
+          key={item.page}
           collapsed={collapsed}
-          compact={!collapsed}
-          selected={view === "apps"}
-          icon={LayoutGrid}
-          label={t("nav.apps")}
-          title={
-            appsUpdateAvailable ? t("nav.appsHasUpdate") : t("nav.appsTitle")
+          selected={
+            view === item.page ||
+            (item.page === "skills" && view === "skillsDiscovery")
           }
-          dot={appsUpdateAvailable}
-          onClick={() => onSelectPage("apps")}
+          icon={item.icon}
+          label={item.label}
+          onClick={() => onSelectPage(item.page)}
         />
-        <NavItem
-          collapsed={collapsed}
-          compact={!collapsed}
-          selected={false}
-          icon={Settings}
-          label={t("nav.settings")}
-          title={hasUpdate ? t("nav.settingsHasUpdate") : t("nav.settings")}
-          dot={hasUpdate}
-          dotTone="success"
-          onClick={() => onSelectPage("settings")}
-        />
-      </div>
-    </>
+      ))}
+    </div>
   );
 }
 
