@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "src/**"
       - "src-tauri/**"
@@ -26,12 +27,14 @@ on:
       - "vite.config.ts"
       - ".github/workflows/linux-appimage.yml"
 
+# Linux build adapted from farion1231/cc-switch/.github/workflows/release.yml.
+# Upstream signs updater bundles; this fork publishes unsigned CI artifacts.
 permissions:
   contents: read
 
 jobs:
   linux-appimage:
-    name: Linux AppImage (${{ matrix.arch }})
+    name: Linux release packages (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
@@ -47,11 +50,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: '20'
 
+      # rust-toolchain.toml 是编译器版本的唯一来源：直接装它，免得先装 stable 再被 rustup 换掉
       - name: Read pinned Rust toolchain
         id: rust-toolchain
         shell: bash
@@ -60,56 +64,94 @@ jobs:
           test -n "$channel"
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-toolchain.outputs.channel }}
 
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config curl wget file patchelf libfuse2 \
-            libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev libssl-dev \
-            libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Install pnpm
-        env:
-          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-        run: |
-          corepack enable
-          corepack install
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      # The repository enables signed updater artifacts by default.
-      # These downloadable CI AppImages are standalone, not updater packages.
-      - name: Build AppImage (without updater signing)
-        run: |
-          pnpm tauri build --bundles appimage --config '{"bundle":{"createUpdaterArtifacts":false}}'
-
-      - name: Verify AppImage output
+      - name: Install Linux system deps
         shell: bash
         run: |
-          set -euo pipefail
-          shopt -s nullglob
-          appimages=(src-tauri/target/release/bundle/appimage/*.AppImage)
-          if [ "${#appimages[@]}" -ne 1 ]; then
-            echo "::error::Expected one AppImage, found ${#appimages[@]}"
-            exit 1
-          fi
-          file "${appimages[0]}"
-          chmod +x "${appimages[0]}"
+          set -euxo pipefail
+          sudo apt-get update
+          # Core build tools and pkg-config
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            curl \
+            wget \
+            file \
+            patchelf \
+            libssl-dev \
+            rpm \
+            flatpak \
+            flatpak-builder \
+            elfutils \
+            xdg-utils
+          # GTK/GLib stack for gdk-3.0, glib-2.0, gio-2.0
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev
+          # WebKit2GTK (version differs across Ubuntu images; try 4.1 then 4.0)
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+          # libsoup also changed major version; prefer 3.0 with fallback to 2.4
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
+            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
 
-      - name: Upload AppImage
+      # Node's bundled Corepack lacks the registry signing key for pnpm 10.12.3.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.3
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-pnpm-store-
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      # Same Linux bundles as upstream; disable updater signatures because
+      # this fork does not have the upstream Tauri private signing key.
+      - name: Build Tauri App (Linux)
+        run: pnpm tauri build --bundles appimage,deb,rpm --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Prepare Linux Assets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p release-assets
+          VERSION="${GITHUB_REF_NAME//\//-}"
+          ARCH="${{ matrix.arch }}"
+          for ext in AppImage deb rpm; do
+            package=$(find src-tauri/target/release/bundle -type f -name "*.${ext}" -print -quit)
+            if [ -z "$package" ]; then
+              echo "::error::Missing Linux .$ext package"
+              exit 1
+            fi
+            asset="CC-Switch-${VERSION}-Linux-${ARCH}.${ext}"
+            cp "$package" "release-assets/$asset"
+            echo "Created $asset"
+          done
+
+      - name: List prepared assets
+        shell: bash
+        run: ls -la release-assets
+
+      - name: Upload release artifacts to workflow
         uses: actions/upload-artifact@v7
         with:
-          name: CC-Switch-Linux-${{ matrix.arch }}-AppImage
-          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          name: release-assets-Linux-${{ matrix.arch }}
+          path: release-assets/*
           if-no-files-found: error
