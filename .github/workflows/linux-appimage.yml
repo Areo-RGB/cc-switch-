@@ -78,12 +78,12 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev libssl-dev \
             libayatana-appindicator3-dev librsvg2-dev
 
+      # Avoid the outdated Corepack signing keys bundled with Node 22.12.0.
       - name: Install pnpm
-        env:
-          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-        run: |
-          corepack enable
-          corepack install
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.3
+          run_install: false
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
