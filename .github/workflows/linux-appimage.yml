@@ -119,6 +119,9 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-pnpm-store-
 
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
       # Same Linux bundles as upstream; disable updater signatures because
       # this fork does not have the upstream Tauri private signing key.
       - name: Build Tauri App (Linux)
